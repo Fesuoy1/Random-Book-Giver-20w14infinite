@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"id": "rng_book_giver-inf",
+	"version": "${version}",
+	"name": "Random Book Giver",
+	"description": "Mod that adds a keybind to give you a random book",
+	"authors": [
+		"Fesuoy"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "MIT",
+	"icon": "assets/rng_book_giver-inf/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"org.mod.rng_book.RandomBookGiver"
+		],
+		"client": [
+			"org.mod.rng_book.client.RandomBookGiverClient"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.14.20",
+		"minecraft": "~1.16-alpha.20.13.inf",
+		"java": ">=8",
+		"fabric": "*"
+	}
+}
