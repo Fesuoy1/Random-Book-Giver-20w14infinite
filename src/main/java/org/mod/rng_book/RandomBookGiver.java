@@ -4,6 +4,8 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.registry.CommandRegistry;
+import net.minecraft.command.arguments.EntityArgumentType;
+import net.minecraft.entity.ai.TargetPredicate;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
@@ -11,19 +13,24 @@ import net.minecraft.item.Items;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
+import net.minecraft.predicate.entity.EntityPredicates;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.Locale;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
@@ -60,7 +67,10 @@ public class RandomBookGiver implements ModInitializer {
     private static final int COORDINATE_RANGE = 6900;
 
     private static final int SUCCESS = 1;
+    private static final int FAILURE = 0;
+    
     private static final ItemStack BOOK = new ItemStack(Items.WRITTEN_BOOK);
+    private static final Random RANDOM_GENERATOR = new Random();
 
     public static void giveRandomBook(World world, PlayerEntity player) {
         Direction direction = Direction.random(world.getRandom());
@@ -101,9 +111,9 @@ public class RandomBookGiver implements ModInitializer {
 
         ChunkPos chunkPos = new ChunkPos(pos);
         String string = chunkPos.x + "/" + chunkPos.z + "/" + k + "/" + u + "/" + i;
-        Random random = new Random(chunkPos.x);
+        RANDOM_GENERATOR.setSeed(chunkPos.x);
         Random random2 = new Random(chunkPos.z);
-        Random random3 = new Random(((long) u << 8) + ((long) i << 4) + k);
+        RANDOM_GENERATOR.setSeed(((long) u << 8) + ((long) i << 4) + k);
         ItemStack itemStack = BOOK.copy();
         CompoundTag compoundTag = itemStack.getOrCreateTag();
         ListTag listTag = new ListTag();
@@ -113,7 +123,7 @@ public class RandomBookGiver implements ModInitializer {
 
             for (int m = 0; m < RANDOM.nextInt(MIN_CHARS_PER_PAGE, MAX_CHARS_PER_PAGE); ++m) {
 
-                int n = random.nextInt() + random2.nextInt() - random3.nextInt();
+                int n = RANDOM_GENERATOR.nextInt() + random2.nextInt() - RANDOM_GENERATOR.nextInt();
 
                 if (RANDOM.nextBoolean()) {
                     stringBuilder.append(Formatting.OBFUSCATED);
@@ -142,6 +152,49 @@ public class RandomBookGiver implements ModInitializer {
         inventory.insertStack(slot, itemStack);
     }
 
+    private static void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher) {
+        for (String name : BookType.ALL) {
+            dispatcher.register(CommandManager.literal("giveBook_" + name)
+                    .requires(source -> source.hasPermissionLevel(3))
+                    .then(CommandManager.argument("amount", IntegerArgumentType.integer(1))
+                            .executes(context -> giveBookToPlayer(context.getSource(), name, IntegerArgumentType.getInteger(context, "amount"), null))));
+
+            dispatcher.register(CommandManager.literal("giveBook_" + name)
+                    .requires(source -> source.hasPermissionLevel(3))
+                            .then(CommandManager.argument("amount", IntegerArgumentType.integer(1))
+                                            .then(CommandManager.argument("players", EntityArgumentType.players())
+                                                            .executes(context -> giveBookToPlayer(context.getSource(), name, IntegerArgumentType.getInteger(context, "amount"), EntityArgumentType.getPlayers(context, "players"))))));
+
+            dispatcher.register(CommandManager.literal("giveBook_" + name)
+                    .requires(source -> source.hasPermissionLevel(3))
+                    .executes(context -> giveBookToPlayer(context.getSource(), name, 1, null)));
+        }
+    }
+
+    private static int giveBookToPlayer(@NotNull ServerCommandSource source, String name, int amount, @Nullable Collection<ServerPlayerEntity> players) {
+        Vec3d pos = source.getPosition();
+
+        PlayerEntity closestPlayer = null;
+        if (players == null || players.isEmpty()) {
+            closestPlayer = source.getWorld().getClosestPlayer((TargetPredicate) EntityPredicates.EXCEPT_SPECTATOR, pos.getX(), pos.getY(), pos.getZ());
+        }
+        String bookType = name.substring(0, 1).toUpperCase(Locale.ROOT) + name.substring(1);
+        if (closestPlayer != null) {
+            for (int i = 0; i < amount; ++i) {
+                giveBook(source.getDisplayName().getString(), name, bookType + " Book", closestPlayer);
+            }
+            return SUCCESS;
+        } else if (players != null && !players.isEmpty()) {
+            for (ServerPlayerEntity player : players) {
+                for (int i = 0; i < amount; ++i) {
+                    giveBook(source.getDisplayName().getString(), name, bookType + " Book", player);
+                }
+            }
+            return SUCCESS;
+        }
+        return FAILURE;
+    }
+
     public static void giveBook(String author, @NotNull String message, String title, PlayerEntity player) {
 
         ItemStack itemStack = BOOK.copy();
@@ -161,27 +214,6 @@ public class RandomBookGiver implements ModInitializer {
         }
         inventory.insertStack(slot, itemStack);
 
-    }
-
-    private static void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher) {
-        for (BookType bookType : BookType.values()) {
-            dispatcher.register(CommandManager.literal("giveBook_" + bookType.name().toLowerCase(Locale.ROOT))
-                    .requires(source -> source.hasPermissionLevel(3))
-                    .then(CommandManager.argument("amount", IntegerArgumentType.integer(1))
-                            .executes(context -> {
-                                for (int i = 0; i < IntegerArgumentType.getInteger(context, "amount"); ++i) {
-                                    giveBook(context.getSource().getDisplayName().getString(), bookType.name().toLowerCase(Locale.ROOT), bookType.name() + " Book", context.getSource().getPlayer());
-                                }
-                                return SUCCESS;
-                            })));
-
-            dispatcher.register(CommandManager.literal("giveBook_" + bookType.name().toLowerCase(Locale.ROOT))
-                    .requires(source -> source.hasPermissionLevel(3))
-                    .executes(context -> {
-                        giveBook(context.getSource().getDisplayName().getString(), bookType.name().toLowerCase(Locale.ROOT), bookType.name() + " Book", context.getSource().getPlayer());
-                        return SUCCESS;
-                    }));
-        }
     }
 
     @Override
