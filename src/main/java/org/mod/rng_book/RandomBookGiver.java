@@ -170,7 +170,7 @@ public class RandomBookGiver implements ModInitializer {
                     .then(CommandManager.argument("amount", IntegerArgumentType.integer(1))
                             .executes(context -> {
                                 for (int i = 0; i < IntegerArgumentType.getInteger(context, "amount"); ++i) {
-                                    giveBook(context.getSource().getDisplayName().getString(), String.valueOf(bookType).toLowerCase(Locale.ROOT), bookType.name() + " Book", context.getSource().getPlayer());
+                                    giveBook(context.getSource().getDisplayName().getString(), bookType.name().toLowerCase(Locale.ROOT), bookType.name() + " Book", context.getSource().getPlayer());
                                 }
                                 return SUCCESS;
                             })));
@@ -178,7 +178,7 @@ public class RandomBookGiver implements ModInitializer {
             dispatcher.register(CommandManager.literal("giveBook_" + bookType.name().toLowerCase(Locale.ROOT))
                     .requires(source -> source.hasPermissionLevel(3))
                     .executes(context -> {
-                        giveBook(context.getSource().getDisplayName().getString(), String.valueOf(bookType).toLowerCase(Locale.ROOT), bookType.name() + " Book", context.getSource().getPlayer());
+                        giveBook(context.getSource().getDisplayName().getString(), bookType.name().toLowerCase(Locale.ROOT), bookType.name() + " Book", context.getSource().getPlayer());
                         return SUCCESS;
                     }));
         }
