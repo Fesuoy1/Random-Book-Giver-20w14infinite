@@ -10,6 +10,8 @@ import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
 import org.mod.rng_book.RandomBookGiver;
 
+import java.util.Objects;
+
 public class RandomBookGiverClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
@@ -17,14 +19,15 @@ public class RandomBookGiverClient implements ClientModInitializer {
                 new Identifier("rng_book_giver", "keybind.random_book_giver"),
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_B,
-                "category.random_book_giver"
+                "category.misc"
         ).build();
         KeyBindingRegistry.INSTANCE.register(keyBinding);
 
         ClientTickCallback.EVENT.register((client) -> {
             IntegratedServer server = client.getServer();
-            while (keyBinding.wasPressed() && client.world != null && client.player != null && server != null) {
-                RandomBookGiver.giveRandomBook(client.world.getWorld(), server.getPlayerManager().getPlayer(client.player.getUuid()));
+            while (keyBinding.wasPressed() && client.world != null && client.player != null && server != null && server.getPermissionLevel(client.player.getGameProfile()) > 2) {
+                RandomBookGiver.giveRandomBook(client.world.getWorld(),
+                        Objects.requireNonNull(server.getPlayerManager().getPlayer(client.player.getUuid())));
             }
         });
     }
