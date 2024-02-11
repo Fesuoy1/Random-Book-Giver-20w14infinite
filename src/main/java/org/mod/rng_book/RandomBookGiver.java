@@ -22,17 +22,16 @@ import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.ChunkPos;
 import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import org.mod.rng_book.random.Random;
+
 import java.util.Collection;
 import java.util.Locale;
-import java.util.Random;
-import java.util.concurrent.ThreadLocalRandom;
 
 
 public class RandomBookGiver implements ModInitializer {
@@ -59,7 +58,7 @@ public class RandomBookGiver implements ModInitializer {
             "Universe itself"
     };
 
-    private static final ThreadLocalRandom RANDOM = ThreadLocalRandom.current();
+    private static final Random RANDOM = Random.create();
     private static final int LENGTH = RANDOM_CHARACTERS.length;
     private static final int MAX_PAGES = 16;
     private static final int MIN_CHARS_PER_PAGE = 100;
@@ -71,10 +70,7 @@ public class RandomBookGiver implements ModInitializer {
 
     public static void giveRandomBook(World world, PlayerEntity player) {
         Direction direction = Direction.random(world.getRandom());
-        int x = RANDOM.nextInt(1, COORDINATE_RANGE);
-        int y = RANDOM.nextInt(1, COORDINATE_RANGE);
-        int z = RANDOM.nextInt(1, COORDINATE_RANGE);
-        BlockPos pos = new BlockPos(x, y, z);
+        BlockPos pos = getRandomBlockPos(world);
         int i = pos.getY();
         int u;
         byte k;
@@ -98,44 +94,24 @@ public class RandomBookGiver implements ModInitializer {
                     k = 3;
             }
         } catch (Exception ex) {
-            u = RANDOM.nextInt(1, COORDINATE_RANGE);
-            k = (byte) RANDOM.nextInt(1, 10);
+            u = getRandomCoordinate();
+            k = getRandomByte();
         }
         while (u == 0 || i == 15) {
-            i = RANDOM.nextInt(1, COORDINATE_RANGE);
-            u = RANDOM.nextInt(1, COORDINATE_RANGE);
+            i = getRandomCoordinate();
+            u = getRandomCoordinate();
         }
 
         ChunkPos chunkPos = new ChunkPos(pos);
-        String string = chunkPos.x + "/" + chunkPos.z + "/" + k + "/" + u + "/" + i;
-        Random random = new Random(chunkPos.x);
-        Random random2 = new Random(chunkPos.z);
-        Random random3 = new Random(((long) u << 8) + ((long) i << 4) + k);
+        String string = getChunkString(chunkPos, k, u, i);
+        Random random = Random.create(chunkPos.x);
+        Random random2 = Random.create(chunkPos.z);
+        Random random3 = Random.create(((long) u << 8) + ((long) i << 4) + k);
         ItemStack itemStack = new ItemStack(Items.WRITTEN_BOOK);
         CompoundTag compoundTag = itemStack.getOrCreateTag();
-        ListTag listTag = new ListTag();
+        ListTag listTag = generateRandomPages(random, random2, random3);
 
-        for (int l = 0; l < MAX_PAGES; ++l) {
-            StringBuilder stringBuilder = new StringBuilder();
-
-            for (int m = 0; m < RANDOM.nextInt(MIN_CHARS_PER_PAGE, MAX_CHARS_PER_PAGE); ++m) {
-
-                int n = random.nextInt() + random2.nextInt() - random3.nextInt();
-
-                if (RANDOM.nextBoolean()) {
-                    stringBuilder.append(Formatting.OBFUSCATED);
-                }
-
-                stringBuilder.append(RANDOM_CHARACTERS[Math.floorMod(n, LENGTH)]);
-
-                if (RANDOM.nextInt(10) <= 3) {
-                    stringBuilder.append(Formatting.RESET);
-                }
-            }
-
-            listTag.add(StringTag.of(Text.Serializer.toJson(new LiteralText(stringBuilder.toString()))));
-        }
-        String author = AUTHORS[RANDOM.nextInt(AUTHORS.length)];
+        String author = getRandomAuthor();
 
         compoundTag.put("pages", listTag);
         compoundTag.putString("author", Formatting.OBFUSCATED + author);
@@ -149,6 +125,48 @@ public class RandomBookGiver implements ModInitializer {
         inventory.insertStack(slot, itemStack);
     }
 
+    private static BlockPos getRandomBlockPos(World world) {
+        int x = RANDOM.nextBetween(1, COORDINATE_RANGE);
+        int y = RANDOM.nextBetween(1, COORDINATE_RANGE);
+        int z = RANDOM.nextBetween(1, COORDINATE_RANGE);
+        return new BlockPos(x, y, z);
+    }
+
+    private static int getRandomCoordinate() {
+        return RANDOM.nextBetween(1, COORDINATE_RANGE);
+    }
+
+    private static byte getRandomByte() {
+        return (byte) RANDOM.nextBetween(1, 10);
+    }
+
+    private static String getChunkString(ChunkPos chunkPos, byte k, int u, int i) {
+        return chunkPos.x + "/" + chunkPos.z + "/" + k + "/" + u + "/" + i;
+    }
+
+    private static ListTag generateRandomPages(Random random, Random random2, Random random3) {
+        ListTag listTag = new ListTag();
+        for (int l = 0; l < MAX_PAGES; ++l) {
+            StringBuilder stringBuilder = new StringBuilder();
+            for (int m = 0; m < RANDOM.nextBetween(MIN_CHARS_PER_PAGE, MAX_CHARS_PER_PAGE); ++m) {
+                int n = random.nextInt() + random2.nextInt() - random3.nextInt();
+                if (RANDOM.nextBoolean()) {
+                    stringBuilder.append(Formatting.OBFUSCATED);
+                }
+                stringBuilder.append(RANDOM_CHARACTERS[Math.floorMod(n, LENGTH)]);
+                if (RANDOM.nextInt(10) <= 3) {
+                    stringBuilder.append(Formatting.RESET);
+                }
+            }
+            listTag.add(StringTag.of(Text.Serializer.toJson(new LiteralText(stringBuilder.toString()))));
+        }
+        return listTag;
+    }
+
+    private static String getRandomAuthor() {
+        return AUTHORS[RANDOM.nextInt(AUTHORS.length)];
+    }
+
     private static void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher) {
         for (String name : BookType.ALL) {
             dispatcher.register(CommandManager.literal("giveBook_" + name)
@@ -158,9 +176,9 @@ public class RandomBookGiver implements ModInitializer {
 
             dispatcher.register(CommandManager.literal("giveBook_" + name)
                     .requires(source -> source.hasPermissionLevel(3))
-                            .then(CommandManager.argument("amount", IntegerArgumentType.integer(1))
-                                            .then(CommandManager.argument("players", EntityArgumentType.players())
-                                                            .executes(context -> giveBookToPlayer(context.getSource(), name, IntegerArgumentType.getInteger(context, "amount"), EntityArgumentType.getPlayers(context, "players"))))));
+                    .then(CommandManager.argument("amount", IntegerArgumentType.integer(1))
+                            .then(CommandManager.argument("players", EntityArgumentType.players())
+                                    .executes(context -> giveBookToPlayer(context.getSource(), name, IntegerArgumentType.getInteger(context, "amount"), EntityArgumentType.getPlayers(context, "players"))))));
 
             dispatcher.register(CommandManager.literal("giveBook_" + name)
                     .requires(source -> source.hasPermissionLevel(3))
@@ -169,7 +187,7 @@ public class RandomBookGiver implements ModInitializer {
     }
 
     private static int giveBookToPlayer(@NotNull ServerCommandSource source, String name, int amount, @Nullable Collection<ServerPlayerEntity> players) {
-        Vec3d pos = source.getPosition();
+        BlockPos pos = new BlockPos(source.getPosition());
 
         PlayerEntity closestPlayer = null;
         if (players == null || players.isEmpty()) {
@@ -196,13 +214,13 @@ public class RandomBookGiver implements ModInitializer {
         ItemStack itemStack = new ItemStack(Items.WRITTEN_BOOK);
         CompoundTag compoundTag = itemStack.getOrCreateTag();
         ListTag listTag = new ListTag();
-    
+
         StringBuilder pageText = new StringBuilder();
-    
+
         // Append the entire message to a single page
         for (int i = 0; i < message.length(); ++i) {
             pageText.append(message.charAt(i));
-            
+
             // Each page can only contain 128 characters
             if (pageText.length() >= MAX_CHARS_PER_PAGE) {
                 listTag.add(StringTag.of(Text.Serializer.toJson(new LiteralText(pageText.toString()))));
@@ -214,27 +232,26 @@ public class RandomBookGiver implements ModInitializer {
         if (pageText.length() > 0) {
             listTag.add(StringTag.of(Text.Serializer.toJson(new LiteralText(pageText.toString()))));
         }
-    
+
         compoundTag.put("pages", listTag);
         compoundTag.putString("author", author);
         compoundTag.putString("title", title);
-    
+
         PlayerInventory inventory = player.inventory;
         int slot = inventory.getEmptySlot();
-    
+
         if (slot == -1) {
             player.dropItem(itemStack, false);
             return;
         }
-    
+
         inventory.insertStack(slot, itemStack);
-    }    
+    }
 
     @Override
     public void onInitialize() {
-        LOGGER.info("Random Book Giver Initialized");
-
         CommandRegistry.INSTANCE.register(false, (RandomBookGiver::registerCommands));
+        LOGGER.info("Random Book Giver Initialized");
     }
 }
 
