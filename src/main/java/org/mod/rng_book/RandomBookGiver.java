@@ -13,7 +13,6 @@ import net.minecraft.item.Items;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
-import net.minecraft.predicate.entity.EntityPredicates;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -34,6 +33,7 @@ import java.util.Collection;
 import java.util.Locale;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
+
 
 public class RandomBookGiver implements ModInitializer {
 
@@ -62,15 +62,12 @@ public class RandomBookGiver implements ModInitializer {
     private static final ThreadLocalRandom RANDOM = ThreadLocalRandom.current();
     private static final int LENGTH = RANDOM_CHARACTERS.length;
     private static final int MAX_PAGES = 16;
-    private static final int MIN_CHARS_PER_PAGE = 64;
-    private static final int MAX_CHARS_PER_PAGE = 256;
-    private static final int COORDINATE_RANGE = 6900;
+    private static final int MIN_CHARS_PER_PAGE = 100;
+    private static final int MAX_CHARS_PER_PAGE = 128;
+    private static final int COORDINATE_RANGE = 69000;
 
     private static final int SUCCESS = 1;
     private static final int FAILURE = 0;
-    
-    private static final ItemStack BOOK = new ItemStack(Items.WRITTEN_BOOK);
-    private static final Random RANDOM_GENERATOR = new Random();
 
     public static void giveRandomBook(World world, PlayerEntity player) {
         Direction direction = Direction.random(world.getRandom());
@@ -111,10 +108,10 @@ public class RandomBookGiver implements ModInitializer {
 
         ChunkPos chunkPos = new ChunkPos(pos);
         String string = chunkPos.x + "/" + chunkPos.z + "/" + k + "/" + u + "/" + i;
-        RANDOM_GENERATOR.setSeed(chunkPos.x);
+        Random random = new Random(chunkPos.x);
         Random random2 = new Random(chunkPos.z);
-        RANDOM_GENERATOR.setSeed(((long) u << 8) + ((long) i << 4) + k);
-        ItemStack itemStack = BOOK.copy();
+        Random random3 = new Random(((long) u << 8) + ((long) i << 4) + k);
+        ItemStack itemStack = new ItemStack(Items.WRITTEN_BOOK);
         CompoundTag compoundTag = itemStack.getOrCreateTag();
         ListTag listTag = new ListTag();
 
@@ -123,13 +120,13 @@ public class RandomBookGiver implements ModInitializer {
 
             for (int m = 0; m < RANDOM.nextInt(MIN_CHARS_PER_PAGE, MAX_CHARS_PER_PAGE); ++m) {
 
-                int n = RANDOM_GENERATOR.nextInt() + random2.nextInt() - RANDOM_GENERATOR.nextInt();
+                int n = random.nextInt() + random2.nextInt() - random3.nextInt();
 
                 if (RANDOM.nextBoolean()) {
                     stringBuilder.append(Formatting.OBFUSCATED);
                 }
 
-                stringBuilder.append(RANDOM_CHARACTERS[n % LENGTH]);
+                stringBuilder.append(RANDOM_CHARACTERS[Math.floorMod(n, LENGTH)]);
 
                 if (RANDOM.nextInt(10) <= 3) {
                     stringBuilder.append(Formatting.RESET);
@@ -176,18 +173,18 @@ public class RandomBookGiver implements ModInitializer {
 
         PlayerEntity closestPlayer = null;
         if (players == null || players.isEmpty()) {
-            closestPlayer = source.getWorld().getClosestPlayer((TargetPredicate) EntityPredicates.EXCEPT_SPECTATOR, pos.getX(), pos.getY(), pos.getZ());
+            closestPlayer = source.getWorld().getClosestPlayer(TargetPredicate.DEFAULT, pos.getX(), pos.getY(), pos.getZ());
         }
         String bookType = name.substring(0, 1).toUpperCase(Locale.ROOT) + name.substring(1);
         if (closestPlayer != null) {
             for (int i = 0; i < amount; ++i) {
-                giveBook(source.getDisplayName().getString(), name, bookType + " Book", closestPlayer);
+                giveBook(closestPlayer.getDisplayName().getString(), name, bookType + " Book", closestPlayer);
             }
             return SUCCESS;
         } else if (players != null && !players.isEmpty()) {
             for (ServerPlayerEntity player : players) {
                 for (int i = 0; i < amount; ++i) {
-                    giveBook(source.getDisplayName().getString(), name, bookType + " Book", player);
+                    giveBook(player.getDisplayName().getString(), name, bookType + " Book", player);
                 }
             }
             return SUCCESS;
@@ -196,25 +193,42 @@ public class RandomBookGiver implements ModInitializer {
     }
 
     public static void giveBook(String author, @NotNull String message, String title, PlayerEntity player) {
-
-        ItemStack itemStack = BOOK.copy();
+        ItemStack itemStack = new ItemStack(Items.WRITTEN_BOOK);
         CompoundTag compoundTag = itemStack.getOrCreateTag();
         ListTag listTag = new ListTag();
-
-        listTag.add(StringTag.of(Text.Serializer.toJson(new LiteralText(message))));
-
+    
+        StringBuilder pageText = new StringBuilder();
+    
+        // Append the entire message to a single page
+        for (int i = 0; i < message.length(); ++i) {
+            pageText.append(message.charAt(i));
+            
+            // Each page can only contain 128 characters
+            if (pageText.length() >= MAX_CHARS_PER_PAGE) {
+                listTag.add(StringTag.of(Text.Serializer.toJson(new LiteralText(pageText.toString()))));
+                // Reset pageText for the next page
+                pageText = new StringBuilder();
+            }
+        }
+        // Add the remaining text to the last page
+        if (pageText.length() > 0) {
+            listTag.add(StringTag.of(Text.Serializer.toJson(new LiteralText(pageText.toString()))));
+        }
+    
         compoundTag.put("pages", listTag);
         compoundTag.putString("author", author);
         compoundTag.putString("title", title);
+    
         PlayerInventory inventory = player.inventory;
         int slot = inventory.getEmptySlot();
+    
         if (slot == -1) {
             player.dropItem(itemStack, false);
             return;
         }
+    
         inventory.insertStack(slot, itemStack);
-
-    }
+    }    
 
     @Override
     public void onInitialize() {

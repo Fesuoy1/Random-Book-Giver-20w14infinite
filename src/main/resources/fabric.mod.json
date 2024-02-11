@@ -3,7 +3,7 @@
 	"id": "rng_book_giver-inf",
 	"version": "${version}",
 	"name": "Random Book Giver",
-	"description": "Mod that adds a keybind to give you a random book",
+	"description": "Mod that adds a keybind to give you a random book and adds several commands",
 	"authors": [
 		"Fesuoy"
 	],

@@ -1,6 +1,6 @@
 package org.mod.rng_book;
 
-//@SuppressWarnings("unused")
+
 public class BookType {
     public static final String ANT = "ant";
     public static final String BASIC = "basic";
